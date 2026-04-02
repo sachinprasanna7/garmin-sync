@@ -1,4 +1,3 @@
-import os
 import json
 from datetime import date
 from fatsecret import Fatsecret
@@ -32,33 +31,55 @@ class FatSecretSyncClient:
             print(f"⚠️ No food logged in FatSecret for {iso_date}")
             return None, []
 
+        # Expanded Daily Row based on available month_summary data
         daily_row = [
             iso_date,
-            day_summary.get('calories', 0),
-            day_summary.get('protein', 0),
-            day_summary.get('carbohydrate', 0),
-            day_summary.get('fat', 0)
+            day_summary.get('calories', '0'),
+            day_summary.get('protein', '0'),
+            day_summary.get('carbohydrate', '0'),
+            day_summary.get('fat', '0'),
+            day_summary.get('cholesterol', '0'),
+            day_summary.get('sodium', '0'),
+            day_summary.get('fiber', '0'),
+            day_summary.get('sugar', '0')
         ]
 
         # 2. Fetch Meal-by-Meal Log
         food_log_rows = []
         try:
             # Gets every single entry logged that day
-            entries = self.fs.food_entries_get(date=epoch_date)
+            entries_response = self.fs.food_entries_get(date=epoch_date)
             
-            # The API returns a dict if there's only 1 item, or a list if multiple. Let's normalize it.
-            if isinstance(entries, dict):
-                entries = [entries]
+            # The API returns a dict if there's only 1 item, a list if multiple, or None
+            if not entries_response:
+                entries = []
+            elif isinstance(entries_response, dict):
+                entries = [entries_response]
+            else:
+                entries = entries_response
                 
             for entry in entries:
                 food_log_rows.append([
                     iso_date,
                     entry.get('meal', 'Unknown'), # Breakfast, Lunch, Dinner
                     entry.get('food_entry_name', 'Unknown Food'),
-                    entry.get('calories', 0),
-                    entry.get('protein', 0),
-                    entry.get('carbohydrate', 0),
-                    entry.get('fat', 0)
+                    entry.get('number_of_units', '1'),
+                    entry.get('calories', '0'),
+                    entry.get('protein', '0'),
+                    entry.get('carbohydrate', '0'),
+                    entry.get('fat', '0'),
+                    entry.get('saturated_fat', '0'),
+                    entry.get('polyunsaturated_fat', '0'),
+                    entry.get('monounsaturated_fat', '0'),
+                    entry.get('cholesterol', '0'),
+                    entry.get('sodium', '0'),
+                    entry.get('potassium', '0'),
+                    entry.get('fiber', '0'),
+                    entry.get('sugar', '0'),
+                    entry.get('vitamin_a', '0'),
+                    entry.get('vitamin_c', '0'),
+                    entry.get('calcium', '0'),
+                    entry.get('iron', '0')
                 ])
         except Exception as e:
             print(f"⚠️ Could not fetch detailed food log: {e}")
