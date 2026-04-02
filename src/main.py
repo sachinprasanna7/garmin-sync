@@ -6,9 +6,10 @@ from sheets_client import SheetsClient
 
 ENV_PATH = "secrets/.env"
 SERVICE_ACCOUNT_PATH = "secrets/service_account.json"
+# SESSION_DIR = "secrets/garth_tokens"
 FS_TOKEN_PATH = "secrets/fs_token.json"  
 
-# --- UPDATED HEADER DEFINITIONS ---
+# --- FATSECRET HEADER DEFINITIONS ---
 # Headers for the Detailed Itemized List
 NUTRITION_ITEMIZED_HEADERS = [
     "Date", "Meal", "Food Name", "Servings", "Calories", "Protein (g)", 
@@ -26,10 +27,37 @@ NUTRITION_SUMMARY_HEADERS = [
 ]
 # --------------------------
 
+# --- GARMIN HEADER DEFINITIONS ---
+DAILY_HEADERS = [
+    "Date", "Steps", "Distance (km)", "Active Calories", "Floors",
+    "Resting HR", "Min HR", "Max HR", "Avg Stress", "Body Battery Max",
+    "Body Battery Min", "Sleep Score", "Sleep Hours", "Hydration (Actual/Goal)",
+    "Readiness Score", "Training Status", "VO2 Max", "Fitness Age",
+    "Avg SpO2", "Avg Respiration", "Weight (kg)"
+]
+
+ACTIVITY_HEADERS = [
+    "Activity ID", "Date/Time", "Name", "Type", "Distance (km)", "Duration",
+    "Avg HR", "Max HR", "Calories", "Aerobic TE", "Anaerobic TE", "VO2 Max", "Steps"
+]
+
+STRENGTH_HEADERS = [
+    "Activity ID", "Date", "Set #", "Exercise Name", "Reps", "Weight (kg)", "Category"
+]
+
 def main():
     print("🚀 Starting Health-to-Sheets Sync (FatSecret Testing)...")
     load_dotenv(ENV_PATH)
     today_date = date.today()
+
+    print("🔌 Initializing Clients...")
+    
+    # 🛑 Garmin temporarily disabled due to 429 Rate Limit
+    # garmin = GarminSyncClient(
+    #     os.getenv("GARMIN_EMAIL"),
+    #     os.getenv("GARMIN_PASSWORD"),
+    #     SESSION_DIR
+    # )
 
     fatsecret = FatSecretSyncClient(
         os.getenv("FATSECRET_KEY"),
@@ -57,6 +85,12 @@ def main():
             
     except Exception as e:
         print(f"⚠️ Could not sync nutrition data: {e}")
+
+    # --- GARMIN SYNC BLOCKS DISABLED ---
+    # print(f"📊 Fetching Master Daily Metrics for {today_iso}...")
+    # ...
+    # print("🏃 Extracting Activity Summaries and Set Data...")
+    # ...
 
     print("✅ Sync Complete!")
 
