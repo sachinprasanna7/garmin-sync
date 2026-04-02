@@ -2,3 +2,4 @@ garminconnect==0.2.40
 gspread
 python-dotenv
 cloudscraper
+fatsecret
