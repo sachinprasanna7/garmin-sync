@@ -2,12 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Install requirements first (for better caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Copy everything else
 COPY . .
 
-# Run the script
-CMD ["python", "main.py"]
+# Set the Python path so it can find your modules in /src
+ENV PYTHONPATH=/app/src
+
+# Run the main script
+CMD ["python", "src/main.py"]
