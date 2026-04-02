@@ -1,46 +1,96 @@
-import json
 import os
+import time
 import datetime
-from garminconnect import Garmin
+from garminconnect import Garmin, GarminConnectAuthenticationError
+
 
 class GarminSyncClient:
-    def __init__(self, email, password, session_path):
-        self.session_path = session_path
+    def __init__(self, email, password, session_dir):
+        self.email = email
+        self.password = password
+        # session_dir is a DIRECTORY now, e.g. "secrets/garth_tokens"
+        # Garth stores multiple token files inside it (not a single .json)
+        self.session_dir = session_dir
         self.client = None
+        self._init_client()
 
-        if os.path.exists(self.session_path):
-            with open(self.session_path, "r") as f:
-                saved_session = json.load(f)
-                self.client = Garmin(session_data=saved_session)
-                self.client.login()
-        
-        if not self.client:
-            self.client = Garmin(email, password)
-            self.client.login()
-            with open(self.session_path, "w") as f:
-                json.dump(self.client.session_data, f)
+    def _init_client(self):
+        """Try restoring from Garth token dir first, fresh login only if needed."""
+        if os.path.isdir(self.session_dir):
+            try:
+                print("Loading saved Garth tokens...")
+                self.client = Garmin()
+                self.client.login(tokenstore=self.session_dir)
+                print("Session restored ✅ (no login request made)")
+                return
+            except Exception as e:
+                print(f"Token restore failed ({e}), doing fresh login...")
+
+        self._fresh_login()
+
+    def _fresh_login(self):
+        """Full credential login — only runs when tokens are missing or expired (~1 year)."""
+        print("Logging in with credentials (this may trigger MFA)...")
+        self.client = Garmin(self.email, self.password)
+        self.client.login()
+        # Garth dumps a directory of token files, valid for ~1 year
+        os.makedirs(self.session_dir, exist_ok=True)
+        self.client.garth.dump(self.session_dir)
+        print(f"Tokens saved to '{self.session_dir}' ✅ (won't login again for ~1 year)")
+
+    def _call(self, fn, *args, **kwargs):
+        """
+        Wraps every API call with:
+        - One auth-error retry (re-logins and retries once)
+        - One 429 retry (waits 60s then retries once)
+        """
+        for attempt in range(2):
+            try:
+                return fn(*args, **kwargs)
+            except GarminConnectAuthenticationError:
+                if attempt == 0:
+                    print("Auth error — refreshing tokens and retrying...")
+                    self._fresh_login()
+                else:
+                    raise
+            except Exception as e:
+                if "429" in str(e) and attempt == 0:
+                    print("Rate limited (429) — waiting 60s before retry...")
+                    time.sleep(60)
+                else:
+                    raise
+
+    # ------------------------------------------------------------------ #
+    #  Daily Metrics                                                       #
+    # ------------------------------------------------------------------ #
 
     def get_everything_daily(self, day):
-        """Fetches a massive array of daily metrics."""
-        # Fetch from multiple endpoints
-        stats = self.client.get_stats_and_body(day)
-        readiness = self.client.get_training_readiness(day)
-        status = self.client.get_training_status(day)
-        sleep = self.client.get_sleep_data(day)
-        hydration = self.client.get_hydration_data(day)
-        rhr = self.client.get_rhr_day(day)
-        spo2 = self.client.get_spo2_data(day)
-        resp = self.client.get_respiration_data(day)
-        max_met = self.client.get_max_metrics(day)
+        """Fetches a broad set of daily metrics from multiple endpoints."""
+        stats     = self._call(self.client.get_stats_and_body, day)
+        readiness = self._call(self.client.get_training_readiness, day)
+        status    = self._call(self.client.get_training_status, day)
+        sleep     = self._call(self.client.get_sleep_data, day)
+        hydration = self._call(self.client.get_hydration_data, day)
+        rhr       = self._call(self.client.get_rhr_day, day)
+        spo2      = self._call(self.client.get_spo2_data, day)
+        resp      = self._call(self.client.get_respiration_data, day)
+        max_met   = self._call(self.client.get_max_metrics, day)
 
-        # Flatten into a single row
+        rhr_value = (
+            rhr.get('allMetrics', {})
+               .get('metricsMap', {})
+               .get('WELLNESS_RESTING_HEART_RATE', [{}])[0]
+               .get('value', 'N/A')
+            if isinstance(rhr, dict) else 'N/A'
+        )
+
         return [
             day,
             stats.get('totalSteps', 0),
             stats.get('totalDistanceMeters', 0) / 1000,
             stats.get('activeKilocalories', 0),
             stats.get('floorsClimbed', 0),
-            rhr.get('allMetrics', {}).get('metricsMap', {}).get('WELLNESS_RESTING_HEART_RATE', [{}])[0].get('value', 'N/A') if isinstance(rhr, dict) else 'N/A',
+            rhr_value,
             stats.get('minHeartRate', 'N/A'),
             stats.get('maxHeartRate', 'N/A'),
             stats.get('averageStressLevel', 'N/A'),
@@ -55,20 +105,23 @@ class GarminSyncClient:
             max_met[0].get('fitnessAge', 'N/A') if isinstance(max_met, list) and max_met else 'N/A',
             spo2.get('averageSpO2', 'N/A') if isinstance(spo2, dict) else 'N/A',
             resp.get('sleepAwakeAvgRespirationRate', 'N/A') if isinstance(resp, dict) else 'N/A',
-            stats.get('weight', 'N/A')
+            stats.get('weight', 'N/A'),
         ]
+
+    # ------------------------------------------------------------------ #
+    #  Activities                                                          #
+    # ------------------------------------------------------------------ #
 
     def get_latest_activities(self, limit=5):
         """Fetches recent activities and their details."""
-        activities = self.client.get_activities(0, limit)
+        activities = self._call(self.client.get_activities, 0, limit)
         summary_rows = []
         strength_rows = []
 
         for act in activities:
-            act_id = act['activityId']
+            act_id   = act['activityId']
             act_type = act['activityType']['typeKey']
-            
-            # 1. Basic Summary Info
+
             summary_rows.append([
                 act_id,
                 act['startTimeLocal'],
@@ -82,13 +135,12 @@ class GarminSyncClient:
                 act.get('aerobicTrainingEffect', 'N/A'),
                 act.get('anaerobicTrainingEffect', 'N/A'),
                 act.get('vO2MaxValue', 'N/A'),
-                act.get('steps', 'N/A')
+                act.get('steps', 'N/A'),
             ])
 
-            # 2. Strength Deep Dive Info
             if act_type == 'strength_training':
                 try:
-                    details = self.client.get_activity_details(act_id)
+                    details = self._call(self.client.get_activity_details, act_id)
                     sets = details.get('metadataDTO', {}).get('sets', [])
                     for i, s in enumerate(sets):
                         strength_rows.append([
@@ -97,8 +149,8 @@ class GarminSyncClient:
                             i + 1,
                             s.get('exerciseName', 'Unknown'),
                             s.get('reps', 0),
-                            s.get('weight', 0) / 1000, # Grams to KG
-                            s.get('category', 'N/A')
+                            s.get('weight', 0) / 1000,  # grams → kg
+                            s.get('category', 'N/A'),
                         ])
                 except Exception as e:
                     print(f"Could not get strength details for {act_id}: {e}")
