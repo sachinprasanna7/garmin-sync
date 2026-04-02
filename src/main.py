@@ -1,64 +1,35 @@
 import os
 from datetime import date
 from dotenv import load_dotenv
-# from garmin_client import GarminSyncClient
 from fatsecret_client import FatSecretSyncClient
 from sheets_client import SheetsClient
 
-# Paths (Relative to /app in Docker)
 ENV_PATH = "secrets/.env"
 SERVICE_ACCOUNT_PATH = "secrets/service_account.json"
-# SESSION_DIR = "secrets/garth_tokens"
 FS_TOKEN_PATH = "secrets/fs_token.json"  
 
-# --- HEADER DEFINITIONS ---
-# ... (Garmin headers kept for tomorrow)
-DAILY_HEADERS = [
-    "Date", "Steps", "Distance (km)", "Active Calories", "Floors",
-    "Resting HR", "Min HR", "Max HR", "Avg Stress", "Body Battery Max",
-    "Body Battery Min", "Sleep Score", "Sleep Hours", "Hydration (Actual/Goal)",
-    "Readiness Score", "Training Status", "VO2 Max", "Fitness Age",
-    "Avg SpO2", "Avg Respiration", "Weight (kg)"
-]
-
-ACTIVITY_HEADERS = [
-    "Activity ID", "Date/Time", "Name", "Type", "Distance (km)", "Duration",
-    "Avg HR", "Max HR", "Calories", "Aerobic TE", "Anaerobic TE", "VO2 Max", "Steps"
-]
-
-STRENGTH_HEADERS = [
-    "Activity ID", "Date", "Set #", "Exercise Name", "Reps", "Weight (kg)", "Category"
-]
-
-# --- NEW MASSIVE NUTRITION HEADERS ---
-NUTRITION_DAILY_HEADERS = [
-    "Date", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)", 
-    "Cholesterol (mg)", "Sodium (mg)", "Fiber (g)", "Sugar (g)"
-]
-
-NUTRITION_LOG_HEADERS = [
+# --- UPDATED HEADER DEFINITIONS ---
+# Headers for the Detailed Itemized List
+NUTRITION_ITEMIZED_HEADERS = [
     "Date", "Meal", "Food Name", "Servings", "Calories", "Protein (g)", 
     "Carbs (g)", "Fat (g)", "Saturated Fat (g)", "Polyunsaturated Fat (g)", 
     "Monounsaturated Fat (g)", "Cholesterol (mg)", "Sodium (mg)", "Potassium (mg)", 
-    "Fiber (g)", "Sugar (g)", "Vitamin A", "Vitamin C", "Calcium", "Iron"
+    "Fiber (g)", "Sugar (g)", "Vitamin A (µg)", "Vitamin C (mg)", "Calcium (mg)", "Iron (mg)"
+]
+
+# Headers for the Daily Summary
+NUTRITION_SUMMARY_HEADERS = [
+    "Date", "Total Calories", "Total Protein (g)", "Total Carbs (g)", "Total Fat (g)", 
+    "Total Saturated Fat (g)", "Total Polyunsaturated Fat (g)", "Total Monounsaturated Fat (g)",
+    "Total Cholesterol (mg)", "Total Sodium (mg)", "Total Potassium (mg)", 
+    "Total Fiber (g)", "Total Sugar (g)", "Total Vitamin A (µg)", "Total Vitamin C (mg)", "Total Calcium (mg)", "Total Iron (mg)"
 ]
 # --------------------------
 
 def main():
-    print("🚀 Starting Health-to-Sheets Sync (Nutrition Only Mode)...")
+    print("🚀 Starting Health-to-Sheets Sync (FatSecret Testing)...")
     load_dotenv(ENV_PATH)
-    
     today_date = date.today()
-    # today_iso = today_date.isoformat()
-
-    print("🔌 Initializing Clients...")
-    
-    # 🛑 Garmin temporarily disabled due to 429 Rate Limit
-    # garmin = GarminSyncClient(
-    #     os.getenv("GARMIN_EMAIL"),
-    #     os.getenv("GARMIN_PASSWORD"),
-    #     SESSION_DIR
-    # )
 
     fatsecret = FatSecretSyncClient(
         os.getenv("FATSECRET_KEY"),
@@ -71,28 +42,23 @@ def main():
         os.getenv("SHEET_NAME")
     )
 
-    # --- GARMIN SYNC BLOCKS DISABLED ---
-    # print(f"📊 Fetching Master Daily Metrics for {today_iso}...")
-    # ...
-    # print("🏃 Extracting Activity Summaries and Set Data...")
-    # ...
-
-    # 3. Sync FatSecret Nutrition Data
+    # Sync FatSecret Nutrition Data
     print("🥗 Extracting FatSecret Nutrition Data...")
     try:
-        daily_macros, food_log = fatsecret.get_daily_nutrition(today_date)
+        daily_summary, itemized_log = fatsecret.get_daily_nutrition(today_date)
 
-        if daily_macros:
-            print("🍽️ Syncing Daily Macros...")
-            sheets.sync_to_tab("Nutrition_Daily", daily_macros, NUTRITION_DAILY_HEADERS)
+        if itemized_log:
+            print(f"📝 Syncing {len(itemized_log)} food items to Nutrition_Daily (Itemized)...")
+            sheets.sync_to_tab("Nutrition_Daily", itemized_log, NUTRITION_ITEMIZED_HEADERS, is_list=True)
         
-        if food_log:
-            print(f"📝 Syncing {len(food_log)} individual food items with full micronutrients...")
-            sheets.sync_to_tab("Nutrition_Log", food_log, NUTRITION_LOG_HEADERS, is_list=True)
+        if daily_summary:
+            print("🍽️ Syncing Daily Summary to Nutrition_Log...")
+            sheets.sync_to_tab("Nutrition_Log", daily_summary, NUTRITION_SUMMARY_HEADERS)
+            
     except Exception as e:
         print(f"⚠️ Could not sync nutrition data: {e}")
 
-    print("✅ Full Sync Complete!")
+    print("✅ Sync Complete!")
 
 if __name__ == "__main__":
     main()
