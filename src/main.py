@@ -30,37 +30,43 @@ NUTRITION_SUMMARY_HEADERS = [
 
 # --- GARMIN HEADER DEFINITIONS ---
 DAILY_HEADERS = [
-    "Date", "Steps", "Distance (km)", "Active Calories", "Floors",
-    "Resting HR", "Min HR", "Max HR", "Avg Stress", "Body Battery Max",
-    "Body Battery Min", "Sleep Score", "Sleep Hours", "Hydration (Actual/Goal)",
-    "Readiness Score", "Training Status", "VO2 Max", "Fitness Age",
-    "Avg SpO2", "Avg Respiration", "Weight (kg)"
+    "Date", "Total Steps", "Distance (km)", "BMR Calories", "Active Calories", "Total Calories",
+    "Floors Climbed", "Highly Active Seconds", "Active Seconds", "Sedentary Seconds", "Sleeping Seconds",
+    "Moderate Intensity Minutes", "Vigorous Intensity Minutes", "Min HR", "Max HR", "Resting HR", "7 Day Avg Resting HR",
+    "Min Average HR", "Max Average HR", "Body Battery Wake Time", "Body Battery Highest", "Body Battery Lowest",
+    "Body Battery Charged Value", "Body Battery Drained Value", "Lowest SpO2", "Avg SpO2", "Highest Respiration", "Lowest Respiration",
+    "Avg Respiration", "Average Stress Level", "Max Stress Level", "Stress Percentage", "Resting Stress Percentage", "Active Stress Percentage",
+    "Weight (kg)", "Hydration (ml)", "Daily Average Hydration (ml)", "Sweat Loss (ml)", "Readiness Score", "Readiness Level", "Sleep Score",
+    "Overnight HRV Avg", "HRV Status", "HRV Balanced Low", "HRV Balanced Upper", "Lactate Threshold HR", "Lactate Threshold Power",
+    "VO2 Max", "Training Status", "Acute Load", "ACWR", "Load Focus", "Low Aerobic Load", "High Aerobic Load", "Anaerobic Load",
+    "Total Sleep (hrs)", "Deep Sleep (hrs)", "Light Sleep (hrs)", "REM Sleep (hrs)", "Awake Time (hrs)", "Bedtime", "Wake Time", "Sleep Body Battery Recharge"
 ]
 
 ACTIVITY_HEADERS = [
-    "Activity ID", "Date", "Time", "Type", "Distance (km)", "Duration",
-    "Pace (min/km)", "Calories", "Avg HR", "Max HR", "Aerobic TE", "Steps"
+    "Activity ID", "Date", "Time", "Type", "Distance (km)", "Duration (HH:MM:SS)", "Pace (min/km)", "Calories",
+    "Avg HR", "Max HR", "Aerobic TE", "Steps"
 ]
 
 STRENGTH_HEADERS = [
-    "Activity ID", "Date", "Time", "Set #", "Category", "Exercise Name", "Reps", "Weight (kg)", "Duration (s)"
+    "Activity ID", "Date", "Start Time", "Set Number", "Exercise Category", "Exercise Name",
+    "Reps", "Weight (kg)", "Set Duration (seconds)"
 ]
 
 RUNNING_MASTER_HEADERS = [
-    "Activity ID", "Name", "Date", "Time", "Distance (km)", "Total Time", "Moving Time",
-    "Avg Pace (min/km)", "Grade Adjusted Pace", "Max Pace", "Elevation Gain (m)", "Elevation Loss (m)",
-    "Total Calories", "Estimated Sweat Loss (ml)", "Avg HR", "Max HR", "Z1 Mins", "Z2 Mins",
-    "Z3 Mins", "Z4 Mins", "Z5 Mins", "Avg Cadence (spm)", "Max Cadence", "Stride Length (cm)",
-    "Ground Contact Time (ms)", "Vertical Oscillation (cm)", "Vertical Ratio (%)", "Avg Power (W)",
-    "Max Power (W)", "Aerobic TE", "Anaerobic TE", "TE Label", "Training Load", "Body Battery Drain",
-    "Fastest 1km", "Fastest 1 Mile", "Fastest 5k"
+    "Activity ID", "Activity Name", "Date", "Time", "Distance (km)", "Total Time", "Moving Time",
+    "Average Pace (min/km)", "Grade Adjusted Pace (min/km)", "Max Pace (min/km)", "Elevation Gain (m)", "Elevation Loss (m)",
+    "Calories", "Estimated Sweat Loss (ml)", "Avg HR", "Max HR", "Z1 Mins", "Z2 Mins", "Z3 Mins", "Z4 Mins", "Z5 Mins",
+    "Avg Stride Cadence (spm)", "Max Stride Cadence (spm)", "Avg Stride Length (cm)", "Avg Ground Contact Time (ms)",
+    "Avg Vertical Oscillation (cm)", "Vertical Ratio (%)", "Avg Power (W)", "Max Power (W)", "Aerobic TE", "Anaerobic TE",
+    "Training Effect Label", "Activity Training Load", "Body Battery Drain",
+    "Fastest Split 1km (min/km)", "Fastest Split 1 Mile (min/km)", "Fastest Split 5k (min/km)"
 ]
 
 RUNNING_LAPWISE_HEADERS = [
     "Activity ID", "Date", "Time", "Lap Number", "Lap Distance (km)", "Lap Duration (MM:SS)",
     "Average Pace (min/km)", "Grade Adjusted Pace (min/km)", "Avg HR", "Max HR", "Avg Cadence (spm)",
     "Stride Length (cm)", "Ground Contact Time (ms)", "Vertical Oscillation (cm)", "Vertical Ratio (%)",
-    "Running Power (Watts)", "Elevation Gain (m)", "Calories per lap"
+    "Average Power (Watts)", "Elevation Gain (m)", "Calories per lap"
 ]
 
 def main():
