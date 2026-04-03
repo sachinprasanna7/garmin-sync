@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  health-sync:
+    build: .
+    container_name: health_sync_runner
+    # This ensures the container removes itself after the script finishes
+    profiles: ["cli"] 
+    volumes:
+      # Mounts your top-level secrets folder directly into the container
+      - ./secrets:/app/secrets
+    env_file:
+      # Automatically loads any environment variables you have in here
+      - ./secrets/.env

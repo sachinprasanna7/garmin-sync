@@ -2,56 +2,27 @@ import os
 import time
 import datetime
 from garminconnect import Garmin, GarminConnectAuthenticationError
-import cloudscraper
-
 
 class GarminSyncClient:
     def __init__(self, email, password, session_dir):
         self.email = email
         self.password = password
-        # session_dir is a DIRECTORY now, e.g. "secrets/garth_tokens"
-        # Garth stores multiple token files inside it (not a single .json)
-        self.session_dir = session_dir
+        self.session_dir = session_dir  # This will be "/app/secrets"
         self.client = None
-        self._init_client()
+        self._login()
 
-    def _init_client(self):
-        """Try restoring from Garth token dir first, fresh login only if needed."""
-        if os.path.isdir(self.session_dir):
-            try:
-                print("Loading saved Garth tokens...")
-                self.client = Garmin()
-                self.client.login(tokenstore=self.session_dir)
-                print("Session restored ✅ (no login request made)")
-                return
-            except Exception as e:
-                print(f"Token restore failed ({e}), doing fresh login...")
-
-        self._fresh_login()
-
-    def _fresh_login(self):
-        """Full credential login — only runs when tokens are missing or expired (~1 year)."""
-        print("Logging in with credentials (this may trigger MFA)...")
-        self.client = Garmin(self.email, self.password)
-        
-        # --- THE CLOUDSCRAPER MONKEY PATCH ---
-        # Cloudflare blocks standard Python requests. We dynamically swap out 
-        # Garth's network session for a Cloudscraper session that mimics Chrome.
-        scraper = cloudscraper.create_scraper(
-            browser={
-                'browser': 'chrome',
-                'platform': 'windows',
-                'desktop': True
-            }
+    def _login(self):
+        """Authenticates using the official SSO flow and json token file."""
+        print("Authenticating Garmin client...")
+        self.client = Garmin(
+            self.email, 
+            self.password,
+            prompt_mfa=lambda: input("MFA code: ")
         )
-        self.client.garth.sess = scraper
-        # ------------------------------------
         
-        self.client.login()
-        # Garth dumps a directory of token files, valid for ~1 year
-        os.makedirs(self.session_dir, exist_ok=True)
-        self.client.garth.dump(self.session_dir)
-        print(f"Tokens saved to '{self.session_dir}' ✅ (won't login again for ~1 year)")
+        # Passes the directory. The library reads/writes garmin_tokens.json here.
+        self.client.login(self.session_dir)
+        print(f"Session ready ✅ (Tokens managed at '{self.session_dir}/garmin_tokens.json')")
 
     def _call(self, fn, *args, **kwargs):
         """
@@ -65,7 +36,7 @@ class GarminSyncClient:
             except GarminConnectAuthenticationError:
                 if attempt == 0:
                     print("Auth error — refreshing tokens and retrying...")
-                    self._fresh_login()
+                    self._login()
                 else:
                     raise
             except Exception as e:
@@ -194,7 +165,6 @@ class GarminSyncClient:
         # SLEEP STAGES & TIMES (Appending to user_summary_data_kpis)
         # ---------------------------------------------------------
         try:
-            import datetime
             sleep_data = self._call(self.client.get_sleep_data, day)
             if isinstance(sleep_data, dict):
                 daily_sleep = sleep_data.get("dailySleepDTO", {})
@@ -232,50 +202,293 @@ class GarminSyncClient:
         return user_summary_data_kpis
 
     # ------------------------------------------------------------------ #
-    #  Activities                                                          #
+    #  Update Activities Daily                                           #
     # ------------------------------------------------------------------ #
 
-    def get_latest_activities(self, limit=5):
-        """Fetches recent activities and their details."""
+    def get_activity_log(self, target_date, limit=8):
+        """Fetches the high-level Activity_Log for a specific target date."""
+        # Fetch the latest 8 activities as requested
         activities = self._call(self.client.get_activities, 0, limit)
-        summary_rows = []
-        strength_rows = []
+        activity_log = []
 
         for act in activities:
-            act_id   = act['activityId']
-            act_type = act['activityType']['typeKey']
+            # Extract the date and time from startTimeLocal (e.g., "2026-04-01 21:52:53")
+            start_time_local = act.get('startTimeLocal', '')
+            if not start_time_local:
+                continue
+                
+            activity_date = start_time_local.split(' ')[0]  # Gets "2026-04-01"
+            activity_time = start_time_local.split(' ')[1] if len(start_time_local.split(' ')) > 1 else 'N/A'
 
-            summary_rows.append([
-                act_id,
-                act['startTimeLocal'],
-                act['activityName'],
-                act_type,
-                round(act.get('distance', 0) / 1000, 2),
-                str(datetime.timedelta(seconds=int(act.get('duration', 0)))),
-                act.get('averageHR', 'N/A'),
-                act.get('maxHR', 'N/A'),
-                act.get('calories', 'N/A'),
-                act.get('aerobicTrainingEffect', 'N/A'),
-                act.get('anaerobicTrainingEffect', 'N/A'),
-                act.get('vO2MaxValue', 'N/A'),
-                act.get('steps', 'N/A'),
+            # FILTER: Only process if the activity date matches the target_date
+            if activity_date != target_date:
+                continue
+
+            # Garmin returns speed in meters/second. Convert to Pace (min/km)
+            speed_ms = act.get('averageSpeed', 0)
+            pace = "N/A"
+            if speed_ms and speed_ms > 0:
+                pace_sec_per_km = 1000 / speed_ms
+                mins, secs = divmod(int(pace_sec_per_km), 60)
+                pace = f"{mins}:{secs:02d}"
+
+            activity_log.append([
+                act.get('activityId'),
+                activity_date,                                                # Date
+                activity_time,                                                # Time
+                act.get('activityType', {}).get('typeKey', 'unknown'),        # Type
+                round(act.get('distance', 0) / 1000, 2),                      # Distance (km)
+                str(datetime.timedelta(seconds=int(act.get('duration', 0)))), # Duration (HH:MM:SS)
+                pace,                                                         # Pace (min/km)
+                act.get('calories', 0),                                       # Calories
+                act.get('averageHR', 'N/A'),                                  # Avg HR
+                act.get('maxHR', 'N/A'),                                      # Max HR
+                act.get('aerobicTrainingEffect', 'N/A'),                      # Aerobic TE
+                act.get('steps', 0)                                           # Steps
+            ])
+            
+        return activity_log
+    
+    def get_strength_log(self, target_date, limit=10):
+        """Fetches the detailed strength training log for a target date."""
+        # STEP 1: Fetch recent activities to find the strength training IDs
+        activities = self._call(self.client.get_activities, 0, limit)
+        strength_log = []
+
+        for act in activities:
+            start_time_local = act.get('startTimeLocal', '')
+            if not start_time_local:
+                continue
+
+            activity_date = start_time_local.split(' ')[0]
+            act_type = act.get('activityType', {}).get('typeKey', '')
+
+            # STEP 2: Filter for ONLY strength training on our target date
+            if activity_date != target_date or act_type != 'strength_training':
+                continue
+
+            act_id = act.get('activityId')
+
+            # STEP 3: Now fetch the detailed sets for this specific workout
+            try:
+                set_data = self._call(self.client.get_activity_exercise_sets, act_id)
+                exercise_sets = set_data.get('exerciseSets', [])
+
+                set_number = 1  # We will manually track working sets per workout
+
+                for s in exercise_sets:
+                    # We only care about actual lifting, skip the rest periods
+                    if s.get('setType') != 'ACTIVE':
+                        continue 
+
+                    # Extract exercise name from Garmin's probability array
+                    exercises = s.get('exercises', [])
+                    exercise_category = 'UNKNOWN'
+                    exercise_name = 'UNKNOWN'
+
+                    if exercises and len(exercises) > 0:
+                        exercise_category = exercises[0].get('category', 'UNKNOWN')
+                        # Sometimes name is null (like for Cardio), so fallback to category
+                        exercise_name = exercises[0].get('name') or exercise_category
+
+                    # Garmin stores weight in grams, convert to kg
+                    weight_g = s.get('weight')
+                    weight_kg = (weight_g / 1000) if weight_g else 0.0
+
+                    # Null check for reps (e.g., timed cardio sets might not have reps)
+                    reps = s.get('repetitionCount') or 0
+
+                    strength_log.append([
+                        act_id,                                # Activity ID
+                        activity_date,                         # Date
+                        s.get('startTime').split('T')[1][:8],  # Start Time (extracted from timestamp)
+                        set_number,                            # Set Number
+                        exercise_category,                     # Broad Category (e.g., BENCH_PRESS)
+                        exercise_name,                         # Specific Name (e.g., DUMBBELL_BENCH_PRESS)
+                        reps,                                  # Reps
+                        weight_kg,                             # Weight (kg)
+                        round(s.get('duration', 0), 1)         # Set Duration (seconds)
+                    ])
+
+                    set_number += 1
+
+            except Exception as e:
+                print(f"Could not fetch strength sets for {act_id}: {e}")
+
+        return strength_log
+    
+
+    def get_running_lapwise_log(self, target_date, limit=10):
+        """Fetches the ultimate deep-dive running log for a target date."""
+        # STEP 1: Fetch recent activities to find the Running IDs
+        activities = self._call(self.client.get_activities, 0, limit)
+        running_lapwise_log = []
+
+        for act in activities:
+            start_time_local = act.get('startTimeLocal', '')
+            if not start_time_local:
+                continue
+
+            activity_date = start_time_local.split(' ')[0]
+            act_type = act.get('activityType', {}).get('typeKey', '')
+
+            # STEP 2: Filter for ONLY running on our target date
+            if activity_date != target_date or act_type != 'running':
+                continue
+
+            act_id = act.get('activityId')
+            activity_time = start_time_local.split(' ')[1] if len(start_time_local.split(' ')) > 1 else 'N/A'
+
+            try:
+                # STEP 3: Fetch lap-by-lap splits
+                splits_data = self._call(self.client.get_activity_splits, act_id)
+                laps = splits_data.get('lapDTOs', [])
+
+                for lap in laps:
+                    # Convert raw Average Speed (m/s) to Pace (min/km)
+                    speed_ms = lap.get('averageSpeed', 0)
+                    pace = "N/A"
+                    if speed_ms and speed_ms > 0:
+                        pace_sec_per_km = 1000 / speed_ms
+                        mins, secs = divmod(int(pace_sec_per_km), 60)
+                        pace = f"{mins}:{secs:02d}"
+
+                    # Convert Grade Adjusted Speed (m/s) to GAP (min/km)
+                    gap_ms = lap.get('avgGradeAdjustedSpeed', 0)
+                    gap_pace = "N/A"
+                    if gap_ms and gap_ms > 0:
+                        gap_sec_per_km = 1000 / gap_ms
+                        mins, secs = divmod(int(gap_sec_per_km), 60)
+                        gap_pace = f"{mins}:{secs:02d}"
+
+                    # Format distance and duration
+                    lap_distance_km = round(lap.get('distance', 0) / 1000, 2)
+                    lap_duration = str(datetime.timedelta(seconds=int(lap.get('duration', 0))))
+
+                    # Build the master row
+                    running_lapwise_log.append([
+                        act_id,                                # Activity ID
+                        activity_date,                         # Date
+                        activity_time,                         # Time
+                        lap.get('lapIndex'),                   # Lap Number
+                        lap_distance_km,                       # Lap Distance (km)
+                        lap_duration,                          # Lap Duration (MM:SS)
+                        pace,                                  # Average Pace (min/km)
+                        gap_pace,                              # Grade Adjusted Pace (min/km)
+                        lap.get('averageHR', 'N/A'),           # Avg HR
+                        lap.get('maxHR', 'N/A'),               # Max HR
+                        lap.get('averageRunCadence', 'N/A'),   # Avg Cadence (spm)
+                        lap.get('strideLength', 'N/A'),        # Stride Length (cm)
+                        lap.get('groundContactTime', 'N/A'),   # Ground Contact Time (ms)
+                        lap.get('verticalOscillation', 'N/A'), # Vertical Oscillation (cm)
+                        lap.get('verticalRatio', 'N/A'),       # Vertical Ratio (%)
+                        lap.get('averagePower', 'N/A'),        # Running Power (Watts)
+                        lap.get('elevationGain', 0),           # Elevation Gain (m)
+                        lap.get('calories', 0)                 # Calories per lap
+                    ])
+
+            except Exception as e:
+                print(f"Could not fetch detailed running splits for {act_id}: {e}")
+
+        return running_lapwise_log
+    
+
+    def get_running_master_log(self, target_date, limit=10):
+        """Fetches the ultimate top-tier summary for running activities on a target date."""
+        activities = self._call(self.client.get_activities, 0, limit)
+        running_master_log = []
+
+        # Helper function to convert meters/second to MM:SS pace
+        def ms_to_pace(speed_ms):
+            if not speed_ms or speed_ms <= 0:
+                return "N/A"
+            pace_sec_per_km = 1000 / speed_ms
+            mins, secs = divmod(int(pace_sec_per_km), 60)
+            return f"{mins}:{secs:02d}"
+
+        # Helper function to convert raw seconds to MM:SS (for fastest splits)
+        def secs_to_time(secs):
+            if not secs or secs <= 0:
+                return "N/A"
+            mins, s = divmod(int(secs), 60)
+            return f"{mins}:{s:02d}"
+
+        for act in activities:
+            start_time_local = act.get('startTimeLocal', '')
+            if not start_time_local:
+                continue
+
+            activity_date = start_time_local.split(' ')[0]
+            act_type = act.get('activityType', {}).get('typeKey', '')
+
+            # FILTER: Only process runs on the target date
+            if activity_date != target_date or act_type != 'running':
+                continue
+
+            # 1. Times & Durations
+            activity_time = start_time_local.split(' ')[1] if len(start_time_local.split(' ')) > 1 else 'N/A'
+            duration_str = str(datetime.timedelta(seconds=int(act.get('duration', 0))))
+            moving_duration_str = str(datetime.timedelta(seconds=int(act.get('movingDuration', 0))))
+
+            # 2. Paces
+            avg_pace = ms_to_pace(act.get('averageSpeed', 0))
+            max_pace = ms_to_pace(act.get('maxSpeed', 0))
+            gap_pace = ms_to_pace(act.get('avgGradeAdjustedSpeed', 0))
+
+            # 3. Time in HR Zones (Garmin returns seconds, converting to minutes for readability)
+            z1_mins = round(act.get('hrTimeInZone_1', 0) / 60, 1)
+            z2_mins = round(act.get('hrTimeInZone_2', 0) / 60, 1)
+            z3_mins = round(act.get('hrTimeInZone_3', 0) / 60, 1)
+            z4_mins = round(act.get('hrTimeInZone_4', 0) / 60, 1)
+            z5_mins = round(act.get('hrTimeInZone_5', 0) / 60, 1)
+
+            running_master_log.append([
+                act.get('activityId'),                                 # 1. Activity ID
+                act.get('activityName', 'Running'),                    # 2. Name
+                activity_date,                                         # 3. Date
+                activity_time,                                         # 4. Time
+                round(act.get('distance', 0) / 1000, 2),               # 5. Distance (km)
+                duration_str,                                          # 6. Total Time
+                moving_duration_str,                                   # 7. Moving Time
+                avg_pace,                                              # 8. Avg Pace (min/km)
+                gap_pace,                                              # 9. Grade Adjusted Pace
+                max_pace,                                              # 10. Max Pace
+                act.get('elevationGain', 0),                           # 11. Elevation Gain (m)
+                act.get('elevationLoss', 0),                           # 12. Elevation Loss (m)
+                act.get('calories', 0),                                # 13. Total Calories
+                act.get('waterEstimated', 0),                          # 14. Estimated Sweat Loss (ml)
+                
+                # --- HEART RATE & EFFORT ---
+                act.get('averageHR', 'N/A'),                           # 15. Avg HR
+                act.get('maxHR', 'N/A'),                               # 16. Max HR
+                z1_mins, z2_mins, z3_mins, z4_mins, z5_mins,           # 17-21. HR Zones (Minutes spent in Z1-Z5)
+                
+                # --- RUNNING DYNAMICS ---
+                act.get('averageRunningCadenceInStepsPerMinute', 0),   # 22. Avg Cadence (spm)
+                act.get('maxRunningCadenceInStepsPerMinute', 0),       # 23. Max Cadence
+                act.get('avgStrideLength', 0),                         # 24. Stride Length (cm)
+                act.get('avgGroundContactTime', 0),                    # 25. Ground Contact Time (ms)
+                act.get('avgVerticalOscillation', 0),                  # 26. Vertical Oscillation (cm)
+                act.get('avgVerticalRatio', 0),                        # 27. Vertical Ratio (%)
+                
+                # --- POWER ---
+                act.get('avgPower', 0),                                # 28. Avg Power (W)
+                act.get('maxPower', 0),                                # 29. Max Power (W)
+                
+                # --- TRAINING EFFECT & LOAD ---
+                act.get('aerobicTrainingEffect', 0),                   # 30. Aerobic TE (0.0 - 5.0)
+                act.get('anaerobicTrainingEffect', 0),                 # 31. Anaerobic TE (0.0 - 5.0)
+                act.get('trainingEffectLabel', 'N/A'),                 # 32. TE Label (e.g., "AEROBIC_BASE")
+                act.get('activityTrainingLoad', 0),                    # 33. Training Load
+                act.get('differenceBodyBattery', 0),                   # 34. Body Battery Drain
+                
+                # --- PERFORMANCE HIGHLIGHTS ---
+                secs_to_time(act.get('fastestSplit_1000', 0)),         # 35. Fastest 1km
+                secs_to_time(act.get('fastestSplit_1609', 0)),         # 36. Fastest 1 Mile
+                secs_to_time(act.get('fastestSplit_5000', 0)),         # 37. Fastest 5k
             ])
 
-            if act_type == 'strength_training':
-                try:
-                    details = self._call(self.client.get_activity_details, act_id)
-                    sets = details.get('metadataDTO', {}).get('sets', [])
-                    for i, s in enumerate(sets):
-                        strength_rows.append([
-                            act_id,
-                            act['startTimeLocal'].split(' ')[0],
-                            i + 1,
-                            s.get('exerciseName', 'Unknown'),
-                            s.get('reps', 0),
-                            s.get('weight', 0) / 1000,  # grams → kg
-                            s.get('category', 'N/A'),
-                        ])
-                except Exception as e:
-                    print(f"Could not get strength details for {act_id}: {e}")
+        return running_master_log
 
-        return summary_rows, strength_rows
+
+    
