@@ -3,10 +3,11 @@ from datetime import date
 from dotenv import load_dotenv
 from fatsecret_client import FatSecretSyncClient
 from sheets_client import SheetsClient
+from garmin_client import GarminSyncClient
 
 ENV_PATH = "secrets/.env"
 SERVICE_ACCOUNT_PATH = "secrets/service_account.json"
-# SESSION_DIR = "secrets/garth_tokens"
+SESSION_DIR = "secrets/garth_tokens"
 FS_TOKEN_PATH = "secrets/fs_token.json"  
 
 # --- FATSECRET HEADER DEFINITIONS ---
@@ -49,15 +50,16 @@ def main():
     print("🚀 Starting Health-to-Sheets Sync (FatSecret Testing)...")
     load_dotenv(ENV_PATH)
     today_date = date.today()
+    today_iso = today_date.isoformat()
 
     print("🔌 Initializing Clients...")
     
-    # 🛑 Garmin temporarily disabled due to 429 Rate Limit
-    # garmin = GarminSyncClient(
-    #     os.getenv("GARMIN_EMAIL"),
-    #     os.getenv("GARMIN_PASSWORD"),
-    #     SESSION_DIR
-    # )
+    #🛑 Garmin temporarily disabled due to 429 Rate Limit
+    garmin = GarminSyncClient(
+        os.getenv("GARMIN_EMAIL"),
+        os.getenv("GARMIN_PASSWORD"),
+        SESSION_DIR
+    )
 
     fatsecret = FatSecretSyncClient(
         os.getenv("FATSECRET_KEY"),
@@ -86,11 +88,27 @@ def main():
     except Exception as e:
         print(f"⚠️ Could not sync nutrition data: {e}")
 
-    # --- GARMIN SYNC BLOCKS DISABLED ---
-    # print(f"📊 Fetching Master Daily Metrics for {today_iso}...")
-    # ...
-    # print("🏃 Extracting Activity Summaries and Set Data...")
-    # ...
+    # 1. Sync Garmin Daily Metrics
+    print(f"📊 Fetching Master Daily Metrics for {today_iso}...")
+    try:
+        daily_row = garmin.get_everything_daily(today_iso)
+        sheets.sync_to_tab("Daily_Master", daily_row, DAILY_HEADERS)
+    except Exception as e:
+        print(f"⚠️ Could not sync daily metrics: {e}")
+
+    # 2. Sync Garmin Activities & Strength Data
+    print("🏃 Extracting Activity Summaries and Set Data...")
+    try:
+        summary_rows, strength_rows = garmin.get_latest_activities(limit=5)
+        
+        if summary_rows:
+            sheets.sync_to_tab("Activity_Summary", summary_rows, ACTIVITY_HEADERS, is_list=True)
+
+        if strength_rows:
+            print(f"🏋️ Found {len(strength_rows)} strength sets. Syncing...")
+            sheets.sync_to_tab("Strength_Deep_Dive", strength_rows, STRENGTH_HEADERS, is_list=True)
+    except Exception as e:
+        print(f"⚠️ Could not sync activities: {e}")
 
     print("✅ Sync Complete!")
 
