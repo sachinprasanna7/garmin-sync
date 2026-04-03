@@ -50,7 +50,7 @@ class GarminSyncClient:
     #  Daily Metrics                                                       #
     # ------------------------------------------------------------------ #
 
-    def get_everything_daily(self, day):
+    def get_everything_daily(self, day, DAILY_HEADERS):
         """Fetches a broad set of daily metrics from multiple endpoints."""
         user_summary_data = self._call(self.client.get_user_summary, day)
         user_summary_data_kpis = {
@@ -198,8 +198,8 @@ class GarminSyncClient:
         except Exception as e:
             print(f"Skipping Sleep Data: {e}")
 
-
-        return user_summary_data_kpis
+        # convert the json into a simple list of kpis in the order of the headers
+        return [user_summary_data_kpis.get(header, 'N/A') for header in DAILY_HEADERS]
 
     # ------------------------------------------------------------------ #
     #  Update Activities Daily                                           #
@@ -249,7 +249,7 @@ class GarminSyncClient:
             
         return activity_log
     
-    def get_strength_log(self, target_date, limit=10):
+    def get_strength_log(self, target_date, limit=25):
         """Fetches the detailed strength training log for a target date."""
         # STEP 1: Fetch recent activities to find the strength training IDs
         activities = self._call(self.client.get_activities, 0, limit)

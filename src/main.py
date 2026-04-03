@@ -72,9 +72,12 @@ RUNNING_LAPWISE_HEADERS = [
 def main():
     print("🚀 Starting Health-to-Sheets Sync...")
     load_dotenv(ENV_PATH)
+
+    # set the target date to april 1 2026
+    #target_date = date(2026, 3, 3)
     
     # Set the target date to YESTERDAY to ensure complete data sync
-    target_date = date.today() - timedelta(days=1)
+    target_date = date.today() - timedelta(days=2)
     target_iso = target_date.isoformat()
 
     print(f"📅 Target Sync Date: {target_iso}")
@@ -117,14 +120,14 @@ def main():
     # 1. Sync Garmin Daily Metrics
     print(f"📊 Fetching Master Daily Metrics for {target_iso}...")
     try:
-        daily_row = garmin.get_everything_daily(target_iso)
+        daily_row = garmin.get_everything_daily(target_iso, DAILY_HEADERS)
         # Note: If daily_row is a dict, ensure sheets_client is built to parse it, 
         # otherwise you may need to map values to the DAILY_HEADERS list.
         sheets.sync_to_tab("Daily_Master", daily_row, DAILY_HEADERS)
     except Exception as e:
         print(f"⚠️ Could not sync daily metrics: {e}")
 
-    # 2. Sync Garmin Activities & Deep Dives
+    #2. Sync Garmin Activities & Deep Dives
     print("🏃 Extracting Activity Summaries and Deep Dives...")
     try:
         # General Activity Log
