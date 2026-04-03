@@ -2,6 +2,7 @@ import os
 import time
 import datetime
 from garminconnect import Garmin, GarminConnectAuthenticationError
+import cloudscraper
 
 
 class GarminSyncClient:
@@ -32,6 +33,20 @@ class GarminSyncClient:
         """Full credential login — only runs when tokens are missing or expired (~1 year)."""
         print("Logging in with credentials (this may trigger MFA)...")
         self.client = Garmin(self.email, self.password)
+        
+        # --- THE CLOUDSCRAPER MONKEY PATCH ---
+        # Cloudflare blocks standard Python requests. We dynamically swap out 
+        # Garth's network session for a Cloudscraper session that mimics Chrome.
+        scraper = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            }
+        )
+        self.client.garth.sess = scraper
+        # ------------------------------------
+        
         self.client.login()
         # Garth dumps a directory of token files, valid for ~1 year
         os.makedirs(self.session_dir, exist_ok=True)
