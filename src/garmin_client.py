@@ -188,9 +188,13 @@ class GarminSyncClient:
                     # Convert Garmin's millisecond timestamps to readable times
                     bedtime = datetime.datetime.fromtimestamp(start_ms / 1000).strftime('%I:%M %p')
                     waketime = datetime.datetime.fromtimestamp(end_ms / 1000).strftime('%I:%M %p')
+
+                    # change it to indian time by adding 5:30 to the time
+                    bedtime_dt = datetime.datetime.fromtimestamp(start_ms / 1000) + datetime.timedelta(hours=5, minutes=30)
+                    waketime_dt = datetime.datetime.fromtimestamp(end_ms / 1000) + datetime.timedelta(hours=5, minutes=30)
                     
-                    user_summary_data_kpis["Bedtime"] = bedtime
-                    user_summary_data_kpis["Wake Time"] = waketime
+                    user_summary_data_kpis["Bedtime"] = bedtime_dt.strftime('%I:%M %p')
+                    user_summary_data_kpis["Wake Time"] = waketime_dt.strftime('%I:%M %p')
 
                 # 3. Bonus
                 user_summary_data_kpis["Sleep Body Battery Recharge"] = sleep_data.get("bodyBatteryChange", 'N/A')
