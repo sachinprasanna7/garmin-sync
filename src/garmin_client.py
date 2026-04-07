@@ -2,6 +2,7 @@ import os
 import time
 import datetime
 from garminconnect import Garmin, GarminConnectAuthenticationError
+import json
 
 class GarminSyncClient:
     def __init__(self, email, password, session_dir):
@@ -493,6 +494,30 @@ class GarminSyncClient:
             ])
 
         return running_master_log
+    
+
+    def get_lifestyle_log(self, target_date):
+        """Fetches the Lifestyle Journaling (Behaviors) data for a target date."""
+        try:
+            data = self._call(self.client.get_lifestyle_logging_data, target_date)
+            reports = data.get("dailyLogsReport", [])
+            
+            behavior_rows = []
+            for item in reports:
+                # Convert the 'details' list/dict into a string so Sheets can accept it
+                details_json = json.dumps(item.get("details", []))
+                
+                behavior_rows.append([
+                    target_date,
+                    item.get("name"),       # e.g., "Habit Streak"
+                    item.get("logStatus"), # "YES"/"NO"
+                    item.get("category"),  # e.g., "LIFESTYLE"
+                    details_json           # This is now a String, not a List!
+                ])
+            return behavior_rows
+        except Exception as e:
+            print(f"⚠️ Could not fetch lifestyle behaviors: {e}")
+            return []
 
 
     

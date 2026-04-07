@@ -69,12 +69,14 @@ RUNNING_LAPWISE_HEADERS = [
     "Average Power (Watts)", "Elevation Gain (m)", "Calories per lap"
 ]
 
+LIFESTYLE_HEADERS = ["Date", "Behavior Name", "Status", "Category", "Details"]
+
 def main():
     print("🚀 Starting Health-to-Sheets Sync...")
     load_dotenv(ENV_PATH)
 
     # set the target date to april 1 2026
-    target_date = date(2026, 3, 22)
+    target_date = date(2026, 4, 6)
     
     # Set the target date to YESTERDAY to ensure complete data sync
     #target_date = date.today() - timedelta(days=2)
@@ -156,6 +158,20 @@ def main():
 
     except Exception as e:
         print(f"⚠️ Could not sync activities: {e}")
+
+    # 3. Sync Lifestyle/Behavioral data
+    print(f"🧠 Fetching Behavioral Logs for {target_iso}...")
+    try:
+        lifestyle_rows = garmin.get_lifestyle_log(target_iso)
+        if lifestyle_rows:
+            print(f"📝 Syncing {len(lifestyle_rows)} lifestyle entries...")
+            # 'is_list=True' because get_lifestyle_log returns a list of lists (rows)
+            sheets.sync_to_tab("Lifestyle_Raw", lifestyle_rows, LIFESTYLE_HEADERS, is_list=True)
+        else:
+            print("ℹ️ No behavioral logs found for this date.")
+    except Exception as e:
+        print(f"⚠️ Could not sync lifestyle data: {e}")
+
 
     print("✅ Sync Complete!")
 
