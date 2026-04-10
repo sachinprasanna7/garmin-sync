@@ -76,7 +76,7 @@ def main():
     load_dotenv(ENV_PATH)
 
     # set the target date to april 1 2026
-    target_date = date(2026, 4, 6)
+    target_date = date(2026, 4, 7)
     
     # Set the target date to YESTERDAY to ensure complete data sync
     #target_date = date.today() - timedelta(days=2)
@@ -167,6 +167,7 @@ def main():
             print(f"📝 Syncing {len(lifestyle_rows)} lifestyle entries...")
             # 'is_list=True' because get_lifestyle_log returns a list of lists (rows)
             sheets.sync_to_tab("Lifestyle_Raw", lifestyle_rows, LIFESTYLE_HEADERS, is_list=True)
+            sheets.process_lifestyle_logs(target_iso)
         else:
             print("ℹ️ No behavioral logs found for this date.")
     except Exception as e:

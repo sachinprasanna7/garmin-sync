@@ -518,6 +518,4 @@ class GarminSyncClient:
         except Exception as e:
             print(f"⚠️ Could not fetch lifestyle behaviors: {e}")
             return []
-
-
-    
+        
