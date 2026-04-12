@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fatsecret_client import FatSecretSyncClient
 from sheets_client import SheetsClient
 from garmin_client import GarminSyncClient
+from weather_client import WeatherClient
 
 ENV_PATH = "secrets/.env"
 SERVICE_ACCOUNT_PATH = "secrets/service_account.json"
@@ -53,13 +54,14 @@ STRENGTH_HEADERS = [
 ]
 
 RUNNING_MASTER_HEADERS = [
-    "Activity ID", "Activity Name", "Date", "Time", "Distance (km)", "Total Time", "Moving Time",
-    "Average Pace (min/km)", "Grade Adjusted Pace (min/km)", "Max Pace (min/km)", "Elevation Gain (m)", "Elevation Loss (m)",
+    "Activity ID", "Activity Name", "Start Latitude", "Start Longitude", "Date", "Time", "Distance (km)", "Total Time", "Moving Time",
+    "Average Pace (min/km)", "Grade Adjusted Pace (min/km)", "Max Pace (min/km)", "Walk Duration (HH:MM:SS)", "Walk Distance (m)", "Elevation Gain (m)", "Elevation Loss (m)",
     "Calories", "Estimated Sweat Loss (ml)", "Avg HR", "Max HR", "Z1 Mins", "Z2 Mins", "Z3 Mins", "Z4 Mins", "Z5 Mins",
     "Avg Stride Cadence (spm)", "Max Stride Cadence (spm)", "Avg Stride Length (cm)", "Avg Ground Contact Time (ms)",
     "Avg Vertical Oscillation (cm)", "Vertical Ratio (%)", "Avg Power (W)", "Max Power (W)", "Aerobic TE", "Anaerobic TE",
     "Training Effect Label", "Activity Training Load", "Body Battery Drain",
-    "Fastest Split 1km (min/km)", "Fastest Split 1 Mile (min/km)", "Fastest Split 5k (min/km)"
+    "Fastest Split 1km (min/km)", "Fastest Split 1 Mile (min/km)", "Fastest Split 5k (min/km)", "User Notes", "Temperature (°C)", "Humidity (%)", 
+    "Dew Point (°C)", "Feels Like (°C)", "Precipitation (mm)", "Wind Speed (km/h)"
 ]
 
 RUNNING_LAPWISE_HEADERS = [
@@ -76,7 +78,7 @@ def main():
     load_dotenv(ENV_PATH)
 
     # set the target date to april 1 2026
-    target_date = date(2026, 4, 7)
+    target_date = date(2026, 2, 23)
     
     # Set the target date to YESTERDAY to ensure complete data sync
     #target_date = date.today() - timedelta(days=2)
@@ -101,6 +103,8 @@ def main():
         SERVICE_ACCOUNT_PATH,
         os.getenv("SHEET_NAME")
     )
+
+    weather = WeatherClient()  # Using default coordinates for Bengaluru
 
     # Sync FatSecret Nutrition Data
     print("🥗 Extracting FatSecret Nutrition Data...")
@@ -147,7 +151,20 @@ def main():
         # Running Master Log
         running_master_rows = garmin.get_running_master_log(target_iso)
         if running_master_rows:
-            print(f"⏱️ Syncing {len(running_master_rows)} running master logs...")
+            print(f"⛅ Fetching hyper-local weather for {len(running_master_rows)} runs...")
+            
+            for row in running_master_rows:
+                run_date = row[4]  # Date
+                run_time = row[5]  # Time
+                run_lat  = row[2]  # Start Latitude
+                run_lon  = row[3]  # Start Longitude
+                
+                # Pass coordinates directly to the API
+                # Pass coordinates directly to the API
+                temp, hum, dew, feels_like, precip, wind = weather.get_run_weather(run_date, run_time, run_lat, run_lon)
+                
+                # Append all 6 weather metrics to the row
+                row.extend([temp, hum, dew, feels_like, precip, wind])
             sheets.sync_to_tab("Running_Master_Log", running_master_rows, RUNNING_MASTER_HEADERS, is_list=True)
 
         # Running Lapwise Log

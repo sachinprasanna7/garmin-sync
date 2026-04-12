@@ -210,7 +210,7 @@ class GarminSyncClient:
     #  Update Activities Daily                                           #
     # ------------------------------------------------------------------ #
 
-    def get_activity_log(self, target_date, limit=8):
+    def get_activity_log(self, target_date, limit=50):
         """Fetches the high-level Activity_Log for a specific target date."""
         # Fetch the latest 8 activities as requested
         activities = self._call(self.client.get_activities, 0, limit)
@@ -323,7 +323,7 @@ class GarminSyncClient:
         return strength_log
     
 
-    def get_running_lapwise_log(self, target_date, limit=10):
+    def get_running_lapwise_log(self, target_date, limit=50):
         """Fetches the ultimate deep-dive running log for a target date."""
         # STEP 1: Fetch recent activities to find the Running IDs
         activities = self._call(self.client.get_activities, 0, limit)
@@ -398,7 +398,7 @@ class GarminSyncClient:
         return running_lapwise_log
     
 
-    def get_running_master_log(self, target_date, limit=10):
+    def get_running_master_log(self, target_date, limit=50):
         """Fetches the ultimate top-tier summary for running activities on a target date."""
         activities = self._call(self.client.get_activities, 0, limit)
         running_master_log = []
@@ -426,6 +426,9 @@ class GarminSyncClient:
             activity_date = start_time_local.split(' ')[0]
             act_type = act.get('activityType', {}).get('typeKey', '')
 
+            start_lat = act.get('startLatitude')
+            start_lon = act.get('startLongitude')
+
             # FILTER: Only process runs on the target date
             if activity_date != target_date or act_type != 'running':
                 continue
@@ -434,6 +437,29 @@ class GarminSyncClient:
             activity_time = start_time_local.split(' ')[1] if len(start_time_local.split(' ')) > 1 else 'N/A'
             duration_str = str(datetime.timedelta(seconds=int(act.get('duration', 0))))
             moving_duration_str = str(datetime.timedelta(seconds=int(act.get('movingDuration', 0))))
+
+            # --- NEW: Surgically Extract Walk Metrics ---
+            act_id = act.get('activityId')
+            walk_duration_secs = 0
+            walk_distance_m = 0.0
+
+            try:
+                # Get the specific activity summary that contains the splitSummaries array
+                full_act = self._call(self.client.get_activity, act_id)
+                splits = full_act.get('splitSummaries', [])
+                
+                # Loop through the array to find the 'WALK' bucket
+                for split in splits:
+                    if split.get('splitType') == 'RWD_WALK':
+                        walk_duration_secs = split.get('duration', 0)
+                        walk_distance_m = split.get('distance', 0)
+                        break # Found it, stop looking
+                        
+            except Exception as e:
+                print(f"⚠️ Could not fetch walk splits for {act_id}: {e}")
+
+            # Format the duration cleanly
+            walk_duration_str = str(datetime.timedelta(seconds=int(walk_duration_secs))) if walk_duration_secs else "0:00:00"
 
             # 2. Paces
             avg_pace = ms_to_pace(act.get('averageSpeed', 0))
@@ -447,17 +473,24 @@ class GarminSyncClient:
             z4_mins = round(act.get('hrTimeInZone_4', 0) / 60, 1)
             z5_mins = round(act.get('hrTimeInZone_5', 0) / 60, 1)
 
+            run_notes = act.get('description', '')
+
             running_master_log.append([
                 act.get('activityId'),                                 # 1. Activity ID
                 act.get('activityName', 'Running'),                    # 2. Name
+                start_lat, 
+                start_lon,                                                       # Bonus: Start Coordinates (for potential weather API integration)
                 activity_date,                                         # 3. Date
                 activity_time,                                         # 4. Time
                 round(act.get('distance', 0) / 1000, 2),               # 5. Distance (km)
+
                 duration_str,                                          # 6. Total Time
                 moving_duration_str,                                   # 7. Moving Time
                 avg_pace,                                              # 8. Avg Pace (min/km)
                 gap_pace,                                              # 9. Grade Adjusted Pace
                 max_pace,                                              # 10. Max Pace
+                walk_duration_str,                                        # 11. Walk Duration
+                walk_distance_m,                                        # 12. Walk Distance (km)
                 act.get('elevationGain', 0),                           # 11. Elevation Gain (m)
                 act.get('elevationLoss', 0),                           # 12. Elevation Loss (m)
                 act.get('calories', 0),                                # 13. Total Calories
@@ -491,6 +524,8 @@ class GarminSyncClient:
                 secs_to_time(act.get('fastestSplit_1000', 0)),         # 35. Fastest 1km
                 secs_to_time(act.get('fastestSplit_1609', 0)),         # 36. Fastest 1 Mile
                 secs_to_time(act.get('fastestSplit_5000', 0)),         # 37. Fastest 5k
+
+                run_notes                                               # 38. User Notes
             ])
 
         return running_master_log
