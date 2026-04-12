@@ -59,7 +59,7 @@ RUNNING_MASTER_HEADERS = [
     "Calories", "Estimated Sweat Loss (ml)", "Avg HR", "Max HR", "Z1 Mins", "Z2 Mins", "Z3 Mins", "Z4 Mins", "Z5 Mins",
     "Avg Stride Cadence (spm)", "Max Stride Cadence (spm)", "Avg Stride Length (cm)", "Avg Ground Contact Time (ms)",
     "Avg Vertical Oscillation (cm)", "Vertical Ratio (%)", "Avg Power (W)", "Max Power (W)", "Aerobic TE", "Anaerobic TE",
-    "Training Effect Label", "Activity Training Load", "Body Battery Drain",
+    "Training Effect Label", "Activity Training Load", "Body Battery Drain", "Workout RPE (1-10)", "Workout Feel (10-100)", "End Stamina (%)", "Normalized Power (W)",
     "Fastest Split 1km (min/km)", "Fastest Split 1 Mile (min/km)", "Fastest Split 5k (min/km)", "User Notes", "Temperature (°C)", "Humidity (%)", 
     "Dew Point (°C)", "Feels Like (°C)", "Precipitation (mm)", "Wind Speed (km/h)"
 ]

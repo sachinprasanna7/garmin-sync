@@ -473,6 +473,20 @@ class GarminSyncClient:
             z4_mins = round(act.get('hrTimeInZone_4', 0) / 60, 1)
             z5_mins = round(act.get('hrTimeInZone_5', 0) / 60, 1)
 
+            # Garmin stores RPE as 10-100, we divide by 10 to get 1-10
+            rpe_raw = act.get('directWorkoutRpe')
+            rpe = int(rpe_raw / 10) if rpe_raw is not None else 'N/A'
+            
+            # Garmin stores Feel as 0-100 (0=Very Weak, 100=Very Strong)
+            feel_raw = act.get('directWorkoutFeel')
+            feel = int(feel_raw) if feel_raw is not None else 'N/A'
+            
+            # Stamina remaining at the end of the run
+            end_stamina = act.get('endPotentialStamina', 'N/A')
+            
+            # Normalized Power
+            np_power = act.get('normalizedPower', 'N/A')
+
             run_notes = act.get('description', '')
 
             running_master_log.append([
@@ -519,6 +533,11 @@ class GarminSyncClient:
                 act.get('trainingEffectLabel', 'N/A'),                 # 32. TE Label (e.g., "AEROBIC_BASE")
                 act.get('activityTrainingLoad', 0),                    # 33. Training Load
                 act.get('differenceBodyBattery', 0),                   # 34. Body Battery Drain
+
+                rpe,                                                    # 35. RPE (Rate of Perceived Exertion)
+                feel,                                                   # 36. Feel (Garmin's subjective strength rating)
+                end_stamina,                                            # 37. Stamina Remaining at End of Run
+                np_power,                                               # 38. Normalized Power (Watts)
                 
                 # --- PERFORMANCE HIGHLIGHTS ---
                 secs_to_time(act.get('fastestSplit_1000', 0)),         # 35. Fastest 1km
