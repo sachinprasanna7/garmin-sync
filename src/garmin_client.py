@@ -473,19 +473,21 @@ class GarminSyncClient:
             z4_mins = round(act.get('hrTimeInZone_4', 0) / 60, 1)
             z5_mins = round(act.get('hrTimeInZone_5', 0) / 60, 1)
 
+            summary_dto = full_act.get('summaryDTO', {}) if 'full_act' in locals() else {}
+
             # Garmin stores RPE as 10-100, we divide by 10 to get 1-10
-            rpe_raw = act.get('directWorkoutRpe')
+            rpe_raw = summary_dto.get('directWorkoutRpe') or act.get('directWorkoutRpe')
             rpe = int(rpe_raw / 10) if rpe_raw is not None else 'N/A'
             
             # Garmin stores Feel as 0-100 (0=Very Weak, 100=Very Strong)
-            feel_raw = act.get('directWorkoutFeel')
+            feel_raw = summary_dto.get('directWorkoutFeel') or act.get('directWorkoutFeel')
             feel = int(feel_raw) if feel_raw is not None else 'N/A'
             
             # Stamina remaining at the end of the run
-            end_stamina = act.get('endPotentialStamina', 'N/A')
+            end_stamina = summary_dto.get('endPotentialStamina') or act.get('endPotentialStamina') or 'N/A'
             
             # Normalized Power
-            np_power = act.get('normalizedPower', 'N/A')
+            np_power = summary_dto.get('normalizedPower') or act.get('normalizedPower') or 'N/A'
 
             run_notes = act.get('description', '')
 
