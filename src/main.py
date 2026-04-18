@@ -77,11 +77,10 @@ def main():
     print("🚀 Starting Health-to-Sheets Sync...")
     load_dotenv(ENV_PATH)
 
-    # set the target date to april 1 2026
-    target_date = date(2026, 2, 23)
+    #target_date = date(2026, 2, 23)
     
     # Set the target date to YESTERDAY to ensure complete data sync
-    #target_date = date.today() - timedelta(days=2)
+    target_date = date.today() - timedelta(days=1)
     target_iso = target_date.isoformat()
 
     print(f"📅 Target Sync Date: {target_iso}")
