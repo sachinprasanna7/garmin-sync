@@ -50,7 +50,7 @@ ACTIVITY_HEADERS = [
 
 STRENGTH_HEADERS = [
     "Activity ID", "Date", "Start Time", "Set Number", "Exercise Category", "Exercise Name",
-    "Reps", "Weight (kg)", "Set Duration (seconds)"
+    "Reps", "Weight (kg)", "Set Duration (seconds), Final Weight (kg), Final Weight (lbs)"
 ]
 
 RUNNING_MASTER_HEADERS = [
@@ -77,8 +77,7 @@ def main():
     print("🚀 Starting Health-to-Sheets Sync...")
     load_dotenv(ENV_PATH)
 
-    #target_date = date(2026, 2, 23)
-    
+    #target_date = date(2026, 4, 30)
     # Set the target date to YESTERDAY to ensure complete data sync
     target_date = date.today() - timedelta(days=1)
     target_iso = target_date.isoformat()
@@ -122,7 +121,7 @@ def main():
     except Exception as e:
         print(f"⚠️ Could not sync nutrition data: {e}")
 
-    # 1. Sync Garmin Daily Metrics
+    #1. Sync Garmin Daily Metrics
     print(f"📊 Fetching Master Daily Metrics for {target_iso}...")
     try:
         daily_row = garmin.get_everything_daily(target_iso, DAILY_HEADERS)

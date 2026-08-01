@@ -574,4 +574,154 @@ class GarminSyncClient:
         except Exception as e:
             print(f"⚠️ Could not fetch lifestyle behaviors: {e}")
             return []
+
+    from datetime import datetime, timedelta
+
+    def get_strength_log(self, target_date, limit=25):
+        """Fetches the detailed strength training log for a target date."""
         
+        # -------------------------------------------------------------------------
+        # Conversion Table Definition (Plate, Weight lbs, Weight kg)
+        # -------------------------------------------------------------------------
+        CONVERSION_TABLE = [
+            {"plate": 1,  "lbs": 135, "kg": 5.90},
+            {"plate": 2,  "lbs": 188, "kg": 8.16},
+            {"plate": 3,  "lbs": 23,  "kg": 10.43},
+            {"plate": 4,  "lbs": 28,  "kg": 12.70},
+            {"plate": 5,  "lbs": 33,  "kg": 14.97},
+            {"plate": 6,  "lbs": 43,  "kg": 19.50},
+            {"plate": 7,  "lbs": 53,  "kg": 24.04},
+            {"plate": 8,  "lbs": 63,  "kg": 28.58},
+            {"plate": 9,  "lbs": 73,  "kg": 33.11},
+            {"plate": 10, "lbs": 83,  "kg": 37.65},
+            {"plate": 11, "lbs": 93,  "kg": 42.18},
+            {"plate": 12, "lbs": 103, "kg": 46.72},
+            {"plate": 13, "lbs": 113, "kg": 51.26},
+            {"plate": 14, "lbs": 123, "kg": 55.79},
+            {"plate": 15, "lbs": 133, "kg": 60.33},
+            {"plate": 16, "lbs": 148, "kg": 67.13},
+            {"plate": 17, "lbs": 163, "kg": 73.94},
+            {"plate": 18, "lbs": 178, "kg": 80.74},
+            {"plate": 19, "lbs": 193, "kg": 87.54},
+            {"plate": 20, "lbs": 208, "kg": 94.35},
+        ]
+
+        # Categorized exercise lists
+        kg_exercise = [
+            'BENCH_PRESS',
+            'SEATED_DUMBBELL_SHOULDER_PRESS',
+            'BARBELL_BICEPS_CURL',
+            'LATERAL_RAISE'
+        ]
+
+        lbs_exercise = [
+            'LAT_PULLDOWN',
+            'SEATED_CABLE_ROW',
+            'TRICEPS_PRESSDOWN'
+        ]
+
+        # STEP 1: Fetch recent activities to find the strength training IDs
+        activities = self._call(self.client.get_activities, 0, limit)
+        strength_log = []
+
+        for act in activities:
+            start_time_local = act.get('startTimeLocal', '')
+            if not start_time_local:
+                continue
+
+            activity_date = start_time_local.split(' ')[0]
+            act_type = act.get('activityType', {}).get('typeKey', '')
+
+            # STEP 2: Filter for ONLY strength training on our target date
+            if activity_date != target_date or act_type != 'strength_training':
+                continue
+
+            act_id = act.get('activityId')
+
+            # STEP 3: Fetch the detailed sets for this specific workout
+            try:
+                set_data = self._call(self.client.get_activity_exercise_sets, act_id)
+                exercise_sets = set_data.get('exerciseSets', [])
+
+                set_number = 1  # Track working sets per workout
+
+                for s in exercise_sets:
+                    # Skip non-active rest periods
+                    if s.get('setType') != 'ACTIVE':
+                        continue 
+
+                    # Extract exercise name from Garmin's structure
+                    exercises = s.get('exercises', [])
+                    exercise_category = 'UNKNOWN'
+                    exercise_name = 'UNKNOWN'
+
+                    if exercises and len(exercises) > 0:
+                        exercise_category = exercises[0].get('category', 'UNKNOWN')
+                        exercise_name = exercises[0].get('name') or exercise_category
+
+                    # --- 1. TIMEZONE CONVERSION (GMT -> IST in 12-hr format) ---
+                    start_time_raw = s.get('startTime')  # e.g., '2026-03-31T08:53:20.0'
+                    if start_time_raw and 'T' in start_time_raw:
+                        time_str = start_time_raw.split('T')[1][:8]
+                        
+                        # Use an alias (dt and td) to completely avoid naming collisions 
+                        from datetime import datetime as dt, timedelta as td
+                        
+                        gmt_time = dt.strptime(time_str, '%H:%M:%S')
+                        # Convert to IST (+5 hours 30 mins)
+                        ist_time = gmt_time + td(hours=5, minutes=30)
+                        formatted_time = ist_time.strftime('%I:%M:%S %p').lstrip('0')
+                    else:
+                        formatted_time = ''
+
+                    # --- 2. WEIGHT CALCULATIONS ---
+                    weight_g = s.get('weight')
+                    weight_kg = (weight_g / 1000) if weight_g else 0.0
+
+                    final_weight_kg = 0.0
+                    final_weight_lbs = 0.0
+
+                    # Check exercise category logic
+                    if exercise_name in kg_exercise:
+                        final_weight_kg = weight_kg
+                        final_weight_lbs = round(final_weight_kg * 2.205, 2)
+
+                    elif exercise_name in lbs_exercise:
+                        if weight_kg > 0:
+                            # Find closest entry in conversion sheet by matching minimal kg distance
+                            closest_match = min(
+                                CONVERSION_TABLE,
+                                key=lambda x: abs(x['kg'] - weight_kg)
+                            )
+                            final_weight_kg = closest_match['kg']
+                            final_weight_lbs = float(closest_match['lbs'])
+
+                    else:
+                        # Default for unrecognized exercises
+                        final_weight_kg = 0.0
+                        final_weight_lbs = 0.0
+
+                    reps = s.get('repetitionCount') or 0
+
+                    # --- 3. APPEND TO OUTPUT ROW ---
+                    strength_log.append([
+                        act_id,                                # Activity ID
+                        activity_date,                         # Date
+                        formatted_time,                        # Start Time (IST 12-hr format, e.g. "2:23:20 PM")
+                        set_number,                            # Set Number
+                        exercise_category,                     # Broad Category
+                        exercise_name,                         # Specific Name
+                        reps,                                  # Reps
+                        weight_kg,                             # Raw Weight (kg)
+                        round(s.get('duration', 0), 1),        # Set Duration (seconds)
+                        final_weight_kg,                       # Final Weight (kg)
+                        final_weight_lbs                        # Final Weight (lbs)
+                    ])
+
+                    set_number += 1
+
+            except Exception as e:
+                print(f"Could not fetch strength sets for {act_id}: {e}")
+
+        return strength_log
+            

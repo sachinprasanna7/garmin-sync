@@ -1,4 +1,5 @@
 garminconnect==0.3.0
 gspread
 python-dotenv
-fatsecret
+fatsecret==0.4.0
+rauth
